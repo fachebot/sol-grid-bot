@@ -2,6 +2,9 @@
 
 🤖 基于 Telegram 的 Solana 链网格交易机器人
 
+<img width="541" height="1072" alt="image" src="https://github.com/user-attachments/assets/e67ee8a3-ab5e-4225-a43b-7efb4bb61c0e" />
+
+
 ## 📋 项目简介
 
 SolGridBot 是一个智能的网格交易机器人，通过 Telegram 接口为用户提供 Solana 链上代币的自动化网格交易服务。用户只需设置价格区间，机器人将在该区间内自动执行低买高卖的网格交易策略，帮助用户在震荡行情中获利。
@@ -215,3 +218,4 @@ Sock5Proxy:
 - 充分理解网格交易的风险和机制
 - 具备相应的技术知识和风险承受能力
 - 仅使用您可以承受损失的资金进行交易
+
