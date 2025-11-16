@@ -1,0 +1,74 @@
+# Solana配置
+Solana:
+  RpcUrl: "https://api.mainnet-beta.solana.com" # 主网RPC地址
+  MaxRetries: 1 # 重试次数
+  SlippageBps: 250 # 滑点Bps
+  MaxLamports: 5000000 # 每笔交易最高费用上限
+  PriorityLevel: medium # 优先等级(medium/high/veryHigh)
+  DexAggregator: jup # DEX聚合器(jup/okx/relay)
+
+# Jup配置
+Jupiter:
+  Url: "https://lite-api.jup.ag" # Jupiter API地址
+  Apikey: "" # Jupiter API密钥
+
+# 数据API(gmgn/jupag/okx)
+Datapi: gmgn
+
+# Okx配置
+OkxWeb3:
+  Apikey:
+  Secretkey:
+  Passphrase:
+
+# 代理服务器配置
+Sock5Proxy:
+  Host: 127.0.0.1 # 代理服务器地址
+  Port: 10808 # 代理服务器端口
+  Enable: true # 是否启用代理
+
+# 电报机器人配置
+TelegramBot:
+  Debug: true
+  ApiToken: 7916072799:AAFb-C25RgEAxNClxqeRpTkmO6C8e7FhzLs
+  WhiteList:
+    - 993021715
+
+# 默认网格设置
+DefaultGridSettings:
+  OrderSize: 38 # 每格大小
+  MaxGridLimit: 15 # 最大网格数量
+  StopLossExit: 0 # 止损金额阈值
+  TakeProfitExit: 80 # 盈利目标金额
+  TakeProfitRatio: 3.5 # 止盈百分比(%)
+  EnableAutoExit: true # 跌破自动清仓
+  LastKlineVolume: 1000 # 最近交易量
+  FiveKlineVolume: 8888 # 最近5分钟交易量
+  GlobalTakeProfitRatio: 0 # 全局止盈涨幅(%)
+  DropOn: true # 防瀑布开关
+  CandlesToCheck: 3 # 防瀑布K线根数
+  DropThreshold: 20 # 防瀑布跌幅阈值百分比(%)
+
+# 快速启动网格设置
+QuickStartSettings:
+  OrderSize: 30 # 每格大小
+  MaxGridLimit: 10 # 最大网格数量
+  StopLossExit: 0 # 止损金额阈值
+  TakeProfitExit: 80 # 盈利目标金额
+  TakeProfitRatio: 3.5 # 止盈百分比(%)
+  EnableAutoExit: true # 跌破自动清仓
+  LastKlineVolume: 3000 # 最近交易量
+  FiveKlineVolume: 20000 # 最近5分钟交易量
+  UpperPriceBound: 0.0002 # 网格价格上限
+  LowerPriceBound: 0.00005 # 网格价格下限
+  GlobalTakeProfitRatio: 0 # 全局止盈涨幅(%)
+  DropOn: true # 防瀑布开关
+  CandlesToCheck: 3 # 防瀑布K线根数
+  DropThreshold: 20 # 防瀑布跌幅阈值百分比(%)
+
+# 创建代币策略的必要条件
+TokenRequirements:
+  MinMarketCap: 200000 # 最小代币市值
+  MinHolderCount: 1500 # 最小代币持有人数
+  MinTokenAgeMinutes: 240 # 最小代币年龄(分钟)
+  MaxTokenAgeMinutes: 960 # 最高代币年龄(分钟)
