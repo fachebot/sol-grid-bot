@@ -2,13 +2,12 @@ package solanautil
 
 import (
 	"context"
-	"errors"
-	"math/big"
-	"strings"
-
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"math/big"
+	"strings"
 
 	bin "github.com/gagliardetto/binary"
 	token_metadata "github.com/gagliardetto/metaplex-go/clients/token-metadata"
@@ -17,11 +16,10 @@ import (
 	"github.com/gagliardetto/solana-go/rpc"
 	"github.com/samber/lo"
 	"github.com/shopspring/decimal"
+	"github.com/tidwall/gjson"
 )
 
-var (
-	ErrTxNotFound = errors.New("tx not found")
-)
+var ErrTxNotFound = errors.New("tx not found")
 
 const (
 	USDC         = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
@@ -199,8 +197,7 @@ func GetTokenMeta(ctx context.Context, solanaRpc *rpc.Client, tokenAddress strin
 						Symbol: state.Symbol,
 						Uri:    state.URI,
 					},
-					UpdateAuthority: solana.MustPublicKeyFromBase58(state.UpdateAuthority),
-					Mint:            solana.MustPublicKeyFromBase58(state.Mint),
+					Mint: solana.MustPublicKeyFromBase58(state.Mint),
 				}
 				return meta, nil
 			}
@@ -230,24 +227,49 @@ func GetTokenMeta(ctx context.Context, solanaRpc *rpc.Client, tokenAddress strin
 	return meta, nil
 }
 
-func GetTokenBalance(ctx context.Context, solanaRpc *rpc.Client, tokenAddress, ownerAddress string) (*big.Int, uint8, error) {
-	mint, err := solana.PublicKeyFromBase58(tokenAddress)
-	if err != nil {
-		return nil, 0, err
-	}
+func FindAssociatedTokenAddress(owner, mint, programID solana.PublicKey) (solana.PublicKey, uint8, error) {
+	return solana.FindProgramAddress([][]byte{
+		owner[:],
+		programID[:],
+		mint[:],
+	},
+		solana.SPLAssociatedTokenAccountProgramID,
+	)
+}
 
+func GetTokenBalance(ctx context.Context, solanaRpc *rpc.Client, tokenAddress, ownerAddress string) (*big.Int, uint8, error) {
 	owner, err := solana.PublicKeyFromBase58(ownerAddress)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	ata, _, err := solana.FindAssociatedTokenAddress(owner, mint)
+	mint, err := solana.PublicKeyFromBase58(tokenAddress)
 	if err != nil {
 		return nil, 0, err
 	}
 
+	mintAta, err := GetAccountInfoJSONParsed(ctx, solanaRpc, mint)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	tokenProgramID := mintAta.Value.Owner
+	ata, _, err := FindAssociatedTokenAddress(owner, mint, tokenProgramID)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	v := gjson.GetBytes(mintAta.Value.Data.GetRawJSON(), "parsed.info.decimals")
+	if !v.Exists() {
+		return nil, 0, fmt.Errorf("token decimals not found")
+	}
+	decimals := uint8(v.Uint())
+
 	account, err := solanaRpc.GetTokenAccountBalance(ctx, ata, rpc.CommitmentFinalized)
 	if err != nil {
+		if strings.Contains(err.Error(), "could not find account") {
+			return big.NewInt(0), decimals, nil
+		}
 		return nil, 0, err
 	}
 
