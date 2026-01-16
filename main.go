@@ -139,7 +139,6 @@ func main() {
 	klineManager.Stop()
 	quotationSubscriber.Stop()
 	orderKeeper.Stop()
-	// loreMonitor.Stop()
 
 	svcCtx.Close()
 	logger.Infof("服务已停止")
