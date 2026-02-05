@@ -14,14 +14,15 @@ SolGridBot 是一个智能的网格交易机器人，通过 Telegram 接口为�
 
 ## ✨ 功能特性
 
-- 🚀 一键部署：无外部依赖，支持快速独立部署
-- 🔗 Sol 链支持：专为 Solana 链优化的交易体验
-- 🎯 智能网格交易：在用户设定的价格区间内自动执行低买高卖策略
-- 🔗 稳定币交易：使用 USDC 交易代币，避免主币波动风险
-- 📱 Telegram 集成：通过 Telegram Bot 提供便捷的用户交互界面
-- 📊 实时监控：通过 Telegram Bot 实时查询盈亏情况和历史交易
-- 🛡️ 安全可靠：本地部署，私钥不离开用户环境
-- 💻 易于部署：支持部署在笔记本、家庭电脑、服务器等环境
+- 🚀 **图形化启动器**：提供 Windows 图形化启动器，无需命令行操作，一键配置和启动
+- 🔗 **Sol 链支持**：专为 Solana 链优化的交易体验
+- 🎯 **智能网格交易**：在用户设定的价格区间内自动执行低买高卖策略
+- 🔗 **稳定币交易**：使用 USDC 交易代币，避免主币波动风险
+- 📱 **Telegram 集成**：通过 Telegram Bot 提供便捷的用户交互界面
+- 📊 **实时监控**：通过 Telegram Bot 实时查询盈亏情况和历史交易
+- 🛡️ **安全可靠**：本地部署，私钥不离开用户环境
+- 💻 **易于部署**：支持部署在笔记本、家庭电脑、服务器等环境
+- ⚙️ **自动更新**：启动器支持自动检测和下载最新版本
 
 ## 🏗️ 技术架构
 
@@ -33,14 +34,78 @@ SolGridBot 是一个智能的网格交易机器人，通过 Telegram 接口为�
 
 ## 🚀 快速开始
 
-> 📌 **普通用户提示**：如果您不是开发者，可以直接跳过下面的编译步骤，前往 [Release 页面](https://github.com/fachebot/sol-grid-bot/releases) 下载最新版本的可执行文件，然后直接查看 [配置说明](#⚙️-配置说明) 部分，修改配置文件后即可运行。
+> 📌 **普通用户推荐**：强烈建议使用 **Launcher（启动器）** 来运行网格机器人！Launcher 提供了图形化界面，可以自动下载最新版本、配置 API 密钥、验证配置、启动和停止程序，以及查看运行日志，让您无需手动编辑配置文件即可轻松使用。
 
-### 环境要求
+### 🎯 使用 Launcher 启动（推荐，仅 Windows）
+
+Launcher 是一个图形化启动工具，专为普通用户设计，提供以下功能：
+
+- ✅ **自动下载最新版本**：首次使用时自动从 GitHub Release 下载最新版本
+- ⚙️ **图形化配置管理**：通过界面配置 Solana RPC、OKX API、Telegram Bot，无需手动编辑配置文件
+- 🔍 **配置验证**：自动验证配置项的有效性，确保配置正确
+- 🚀 **一键启动/停止**：通过界面按钮轻松启动和停止机器人
+- 📋 **实时日志查看**：在界面中实时查看程序运行日志，支持级别过滤
+- 🔄 **版本管理**：自动检查更新，发现新版本时提示下载
+
+#### 使用步骤
+
+1. **下载 Launcher**
+   - 前往 [Release 页面](https://github.com/fachebot/sol-grid-bot/releases)
+   - 根据您的系统架构下载对应的 Launcher 压缩包：
+     - Windows 64位：`launcher-v*-windows-amd64.zip`
+     - Windows 32位：`launcher-v*-windows-386.zip`
+
+2. **解压并运行**
+   - 解压下载的压缩包到任意目录
+   - 双击运行 `launcher.exe`
+
+3. **配置和启动**
+   - Launcher 会自动检测并下载最新版本的机器人程序（如果不存在）
+   - 在 Launcher 界面中配置必要的 API 密钥：
+     - **Solana RPC URL**：点击"修改"按钮，输入 RPC 地址并验证
+     - **OKX API**：输入 API Key、Secret Key 和 Passphrase 并验证
+     - **Telegram Bot**：输入 Bot Token 并验证
+   - 配置验证通过后，点击"启动"按钮即可运行机器人
+
+4. **查看日志**
+   - 在 Launcher 界面底部可以实时查看程序运行日志
+   - 支持按日志级别过滤（ALL、INFO、WARN、ERROR、DEBUG）
+
+> 💡 **提示**：Launcher 会自动管理配置文件，您无需手动编辑 `etc/config.yaml` 文件。所有配置都可以通过 Launcher 界面完成。
+
+### 💻 直接运行程序（开发者或 Linux 用户）
+
+如果您是开发者，或者需要在 Linux 系统上运行，可以下载主程序并直接运行：
+
+#### 下载和运行
+
+1. **下载程序**
+   - 前往 [Release 页面](https://github.com/fachebot/sol-grid-bot/releases)
+   - 根据您的系统架构下载对应的压缩包：
+     - Linux 64位：`sol-grid-bot-v*-linux-amd64.tar.gz`
+     - Windows 64位：`sol-grid-bot-v*-windows-amd64.zip`
+     - Windows 32位：`sol-grid-bot-v*-windows-386.zip`
+
+2. **解压文件**
+   - 解压下载的压缩包到目标目录
+
+3. **配置和运行**
+   - 修改 `etc/config.yaml` 配置文件（参考下面的配置说明）
+   - 运行可执行文件：
+     ```bash
+     # Linux
+     ./sol-grid-bot -f etc/config.yaml
+     
+     # Windows
+     ./sol-grid-bot.exe -f etc/config.yaml
+     ```
+
+### 🔨 从源码编译（开发者）
+
+如果您想从源码编译，需要以下环境：
 
 - Git
 - Go 1.24.1 或更高版本
-
-### 安装部署
 
 **1. 克隆项目**
 
@@ -74,7 +139,9 @@ go build
 
 ### ⚙️ 配置说明
 
-在运行项目前，需要创建配置文件 `etc/config.yaml`，你可以复制 [etc/config.yaml.sample](etc/config.yaml.sample) 文件到 `etc/config.yaml` 并进行修改：
+> 💡 **使用 Launcher 的用户**：如果您使用 Launcher 启动机器人，可以直接在 Launcher 界面中配置，无需手动编辑配置文件。Launcher 会自动创建和管理配置文件。
+
+如果您选择直接运行程序，需要手动创建配置文件 `etc/config.yaml`，你可以复制 [etc/config.yaml.sample](etc/config.yaml.sample) 文件到 `etc/config.yaml` 并进行修改：
 
 ```yaml
 # Solana配置
