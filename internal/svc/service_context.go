@@ -116,7 +116,7 @@ func NewServiceContext(c *config.Config, strategyEngine *engine.StrategyEngine) 
 		BotUserInfo:      &botUserInfo,
 		SolanaRpc:        solanaRpc,
 		OkxClient:        okxweb3.NewClient(c.Sock5Proxy),
-		GmgnClient:       gmgn.NewClient(c.Sock5Proxy, c.ZenRows),
+		GmgnClient:       gmgn.NewClient(c.Sock5Proxy),
 		JupagClient:      jupag.NewClient(c.Sock5Proxy),
 		TransportProxy:   transportProxy,
 		LookuptableCache: cache.NewLookuptableCache(solanaRpc),

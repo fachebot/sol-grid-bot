@@ -101,7 +101,7 @@ func main() {
 		subscriber.Start()
 		subscriber.WaitUntilConnected()
 
-		gmgnClient := gmgn.NewClient(c.Sock5Proxy, c.ZenRows)
+		gmgnClient := gmgn.NewClient(c.Sock5Proxy)
 		klineManager = gmgn.NewKlineManager(gmgnClient, subscriber, candles)
 		klineManager.Start()
 

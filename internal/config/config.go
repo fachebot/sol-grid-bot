@@ -30,13 +30,6 @@ type OkxWeb3 struct {
 	Passphrase string `yaml:"Passphrase"`
 }
 
-type ZenRows struct {
-	Apikey              string `yaml:"Apikey"`
-	FetchTokenCandles   bool   `yaml:"FetchTokenCandles"`
-	FetchTokenHolders   bool   `yaml:"FetchTokenHolders"`
-	FetchWalletHoldings bool   `yaml:"FetchWalletHoldings"`
-}
-
 type Sock5Proxy struct {
 	Host   string `yaml:"Host"`
 	Port   int32  `yaml:"Port"`
@@ -140,7 +133,6 @@ type Config struct {
 	Jupiter             Jupiter             `yaml:"Jupiter"`
 	Datapi              string              `yaml:"Datapi"`
 	OkxWeb3             OkxWeb3             `yaml:"OkxWeb3"`
-	ZenRows             ZenRows             `yaml:"ZenRows"`
 	Sock5Proxy          Sock5Proxy          `yaml:"Sock5Proxy"`
 	TelegramBot         TelegramBot         `yaml:"TelegramBot"`
 	DefaultGridSettings DefaultGridSettings `yaml:"DefaultGridSettings"`
