@@ -35,7 +35,7 @@ require (
 require (
 	fyne.io/systray v1.12.0 // indirect
 	github.com/BurntSushi/toml v1.5.0 // indirect
-	github.com/enetx/g v1.0.212 // indirect
+	github.com/enetx/g v1.0.212
 	github.com/enetx/http v1.0.28 // indirect
 	github.com/enetx/http2 v1.0.26 // indirect
 	github.com/enetx/http3 v1.0.7 // indirect
