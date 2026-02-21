@@ -1,5 +1,8 @@
 package okxweb3
 
+// OKX Web3 K线数据订阅者
+// 通过WebSocket实时接收代币K线数据
+
 import (
 	"context"
 	"encoding/json"
@@ -21,32 +24,36 @@ import (
 )
 
 const (
-	reconnectInitial = 1 * time.Second
-	reconnectMax     = 30 * time.Second
+	reconnectInitial = 1 * time.Second  // 初始重连间隔
+	reconnectMax     = 30 * time.Second // 最大重连间隔
 )
 
+// Ticker K线数据 ticker
 type Ticker struct {
-	Token string
-	First bool
-	Ohlc  charts.Ohlc
+	Token string      // 代币地址
+	First bool        // 是否为首次接收
+	Ohlc  charts.Ohlc // K线数据
 }
 
+// OkxSubscriber OKX WebSocket订阅者结构体
 type OkxSubscriber struct {
-	ctx        context.Context
-	cancel     context.CancelFunc
-	stopChan   chan struct{}
-	url        string
-	resolution string
-	conn       *websocket.Conn
-	proxy      config.Sock5Proxy
-	reconnect  chan struct{}
-	mutex      sync.Mutex
-	assets     map[string]struct{}
+	ctx        context.Context     // 上下文
+	cancel     context.CancelFunc  // 取消函数
+	stopChan   chan struct{}       // 停止信号通道
+	url        string              // WebSocket URL
+	resolution string              // K线周期
+	conn       *websocket.Conn     // WebSocket连接
+	proxy      config.Sock5Proxy   // SOCK5代理配置
+	reconnect  chan struct{}       // 重连信号通道
+	mutex      sync.Mutex          // 互斥锁
+	assets     map[string]struct{} // 订阅的代币列表
 
-	tickerChan     chan Ticker
-	messageCounter map[string]int
+	tickerChan     chan Ticker    // K线数据通道
+	messageCounter map[string]int // 消息计数器
 }
 
+// netDialTLSContext 创建自定义TLS连接的Dialer
+// 支持SOCK5代理和TLS指纹模拟
 func netDialTLSContext(ctx context.Context, network, addr string, sock5Proxy string) (net.Conn, error) {
 	serverName := addr
 	if host, _, err := net.SplitHostPort(addr); err == nil {
@@ -97,6 +104,9 @@ func netDialTLSContext(ctx context.Context, network, addr string, sock5Proxy str
 	return client, nil
 }
 
+// NewOkxSubscriber 创建新的OKX订阅者
+// resolution: K线周期 (如 "1m", "5m", "1h")
+// proxy: SOCK5代理配置
 func NewOkxSubscriber(resolution string, proxy config.Sock5Proxy) *OkxSubscriber {
 	ctx, cancel := context.WithCancel(context.Background())
 	subscriber := &OkxSubscriber{
@@ -112,6 +122,7 @@ func NewOkxSubscriber(resolution string, proxy config.Sock5Proxy) *OkxSubscriber
 	return subscriber
 }
 
+// Stop 停止订阅者服务
 func (subscriber *OkxSubscriber) Stop() {
 	logger.Infof("[OkxSubscriber] 准备停止服务")
 
@@ -134,6 +145,7 @@ func (subscriber *OkxSubscriber) Stop() {
 	logger.Infof("[OkxSubscriber] 服务已经停止")
 }
 
+// Start 启动订阅者服务
 func (subscriber *OkxSubscriber) Start() {
 	if subscriber.stopChan != nil {
 		return
@@ -147,12 +159,14 @@ func (subscriber *OkxSubscriber) Start() {
 	}
 }
 
+// WaitUntilConnected 等待连接建立
 func (subscriber *OkxSubscriber) WaitUntilConnected() {
 	for subscriber.conn == nil {
 		time.Sleep(time.Second * 1)
 	}
 }
 
+// GetTickerChan 获取K线数据通道
 func (subscriber *OkxSubscriber) GetTickerChan() <-chan Ticker {
 	if subscriber.tickerChan == nil {
 		subscriber.tickerChan = make(chan Ticker, 1024)
@@ -160,6 +174,8 @@ func (subscriber *OkxSubscriber) GetTickerChan() <-chan Ticker {
 	return subscriber.tickerChan
 }
 
+// Subscribe 订阅代币K线数据
+// assets: 代币地址列表
 func (subscriber *OkxSubscriber) Subscribe(assets []string) error {
 	allAssets := make([]string, 0)
 	subscriber.mutex.Lock()
@@ -198,6 +214,8 @@ func (subscriber *OkxSubscriber) Subscribe(assets []string) error {
 	return err
 }
 
+// Unsubscribe 取消订阅代币K线数据
+// assets: 代币地址列表
 func (subscriber *OkxSubscriber) Unsubscribe(assets []string) error {
 	if len(assets) == 0 {
 		return nil
@@ -234,6 +252,7 @@ func (subscriber *OkxSubscriber) Unsubscribe(assets []string) error {
 	return err
 }
 
+// run 主运行循环，处理重连逻辑
 func (subscriber *OkxSubscriber) run() {
 	subscriber.connect()
 
@@ -262,6 +281,7 @@ loop:
 	subscriber.stopChan <- struct{}{}
 }
 
+// connect 建立WebSocket连接
 func (subscriber *OkxSubscriber) connect() {
 	proxy := ""
 	if subscriber.proxy.Enable {
@@ -311,6 +331,7 @@ func (subscriber *OkxSubscriber) connect() {
 	go subscriber.readMessages()
 }
 
+// heartbeat 发送心跳包保持连接
 func (subscriber *OkxSubscriber) heartbeat(ctx context.Context) {
 	timer := time.NewTimer(0)
 	defer timer.Stop()
@@ -331,6 +352,7 @@ func (subscriber *OkxSubscriber) heartbeat(ctx context.Context) {
 	}
 }
 
+// readMessages 读取并处理WebSocket消息
 func (subscriber *OkxSubscriber) readMessages() {
 	defer subscriber.conn.Close()
 
@@ -415,6 +437,7 @@ func (subscriber *OkxSubscriber) readMessages() {
 	}
 }
 
+// scheduleReconnect 安排重连
 func (subscriber *OkxSubscriber) scheduleReconnect() {
 	if subscriber.ctx.Err() == nil {
 		select {

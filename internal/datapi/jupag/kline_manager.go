@@ -1,5 +1,8 @@
 package jupag
 
+// Jupiter K线管理器
+// 基于交易数据构建K线数据
+
 import (
 	"context"
 	"time"
@@ -11,24 +14,30 @@ import (
 )
 
 const (
-	maxCandelsLimit = 1000
+	maxCandelsLimit = 1000 // 最大K线数据条数
 )
 
+// KlineManager K线管理器结构体
 type KlineManager struct {
-	ctx      context.Context
-	cancel   context.CancelFunc
-	stopChan chan struct{}
+	ctx      context.Context    // 上下文
+	cancel   context.CancelFunc // 取消函数
+	stopChan chan struct{}      // 停止信号通道
 
-	client             *Client
-	subscriber         *JupagSubscriber
-	candles            int
-	resolution         string
-	resolutionDuration time.Duration
-	tokenOhlcsMap      map[string][]charts.Ohlc
+	client             *Client                  // Jupiter API客户端
+	subscriber         *JupagSubscriber         // WebSocket订阅者
+	candles            int                      // K线数量
+	resolution         string                   // K线周期
+	resolutionDuration time.Duration            // K线周期时长
+	tokenOhlcsMap      map[string][]charts.Ohlc // 代币K线数据缓存
 
-	tokenOhlcsChan chan charts.TokenOhlcs
+	tokenOhlcsChan chan charts.TokenOhlcs // K线数据输出通道
 }
 
+// NewKlineManager 创建新的K线管理器
+// client: Jupiter API客户端
+// subscriber: WebSocket订阅者
+// resolution: K线周期
+// candles: K线数量
 func NewKlineManager(client *Client, subscriber *JupagSubscriber, resolution string, candles int) *KlineManager {
 	if candles > maxCandelsLimit {
 		candles = maxCandelsLimit
@@ -53,6 +62,7 @@ func NewKlineManager(client *Client, subscriber *JupagSubscriber, resolution str
 	}
 }
 
+// Stop 停止K线管理器服务
 func (m *KlineManager) Stop() {
 	if m.stopChan == nil {
 		return
@@ -75,6 +85,7 @@ func (m *KlineManager) Stop() {
 	logger.Infof("[KlineManager] 服务已经停止")
 }
 
+// Start 启动K线管理器服务
 func (m *KlineManager) Start() {
 	if m.stopChan != nil {
 		return
@@ -85,14 +96,17 @@ func (m *KlineManager) Start() {
 	go m.run()
 }
 
+// Subscribe 订阅代币交易数据
 func (m *KlineManager) Subscribe(assets []string) error {
 	return m.subscriber.SubscribeTrades(assets)
 }
 
+// Unsubscribe 取消订阅代币交易数据
 func (m *KlineManager) Unsubscribe(assets []string) error {
 	return m.subscriber.UnsubscribeTrades(assets)
 }
 
+// GetOhlcsChan 获取K线数据输出通道
 func (m *KlineManager) GetOhlcsChan() <-chan charts.TokenOhlcs {
 	if m.tokenOhlcsChan == nil {
 		m.tokenOhlcsChan = make(chan charts.TokenOhlcs, 1024)
@@ -100,6 +114,7 @@ func (m *KlineManager) GetOhlcsChan() <-chan charts.TokenOhlcs {
 	return m.tokenOhlcsChan
 }
 
+// run 主运行循环，处理交易数据并构建K线
 func (m *KlineManager) run() {
 	tradeChan := m.subscriber.GetTradeChan()
 
@@ -131,6 +146,7 @@ func (m *KlineManager) run() {
 	}
 }
 
+// trimOhlcs 裁剪K线数据，保持在限制范围内
 func (m *KlineManager) trimOhlcs(ohlcs []charts.Ohlc) []charts.Ohlc {
 	if len(ohlcs) <= maxCandelsLimit {
 		return ohlcs
@@ -142,6 +158,8 @@ func (m *KlineManager) trimOhlcs(ohlcs []charts.Ohlc) []charts.Ohlc {
 	return ohlcs
 }
 
+// updateOhlcs 根据交易数据更新K线
+// 首次接收时从API加载历史数据，后续基于交易数据增量更新
 func (m *KlineManager) updateOhlcs(data Trade) ([]charts.Ohlc, bool) {
 	ohlcs := m.tokenOhlcsMap[data.Asset]
 

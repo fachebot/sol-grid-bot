@@ -1,115 +1,115 @@
 package okxweb3
 
+// OKX Web3 API 客户端
+// 用于获取OKX DEX的K线数据
+
 import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"slices"
 	"time"
 
 	"github.com/fachebot/sol-grid-bot/internal/charts"
 	"github.com/fachebot/sol-grid-bot/internal/config"
 
-	"github.com/Danny-Dasilva/CycleTLS/cycletls"
+	"github.com/enetx/g"
+	"github.com/enetx/surf"
 	"github.com/shopspring/decimal"
 )
 
 const (
-	// API endpoints
+	// OKX Web3 API 基础URL
 	okxBaseURL = "https://web3.okx.com"
-
-	// HTTP headers
-	defaultJA3       = "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0"
-	defaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36"
 )
 
+// Client OKX Web3 API 客户端结构体
 type Client struct {
-	proxy      config.Sock5Proxy
-	httpClient cycletls.CycleTLS
+	proxy      config.Sock5Proxy // SOCK5 代理配置
+	surfClient *surf.Client      // HTTP 客户端
 }
 
+// NewClient 创建新的OKX Web3 API客户端
+// proxy: SOCK5 代理配置
 func NewClient(proxy config.Sock5Proxy) *Client {
+	var cli *surf.Client
+
+	if proxy.Enable {
+		proxyURL := g.String(fmt.Sprintf("socks5://%s:%d", proxy.Host, proxy.Port))
+		cli = surf.NewClient().
+			Builder().
+			Impersonate().
+			Chrome().
+			Proxy(proxyURL).
+			Build().
+			Unwrap()
+	} else {
+		cli = surf.NewClient().
+			Builder().
+			Impersonate().
+			Chrome().
+			Build().
+			Unwrap()
+	}
+
 	return &Client{
 		proxy:      proxy,
-		httpClient: cycletls.Init(),
+		surfClient: cli,
 	}
 }
 
-// getProxyURL 获取代理URL
-func (c *Client) getProxyURL() string {
-	if !c.proxy.Enable {
-		return ""
+// doRequest 发送HTTP请求到OKX API
+// ctx: 上下文
+// url: 请求URL
+// method: HTTP方法 (GET/POST)
+// bodyJson: 请求体JSON数据
+// referer: Referer头
+// 返回: 响应体字符串和错误
+func (c *Client) doRequest(ctx context.Context, url, method string, bodyJson any, referer string) (string, error) {
+	headers := map[string]string{
+		"accept":          "application/json, text/plain, */*",
+		"accept-language": "zh-CN,zh;q=0.9",
+		"accept-encoding": "gzip,deflate,br",
 	}
-	return fmt.Sprintf("socks5://%s:%d", c.proxy.Host, c.proxy.Port)
-}
-
-// getCommonHeaders 获取通用请求头
-func (c *Client) getCommonHeaders() map[string]string {
-	return map[string]string{
-		"accept":                      "application/json, text/plain, */*",
-		"accept-language":             "zh-CN,zh;q=0.9",
-		"accept-encoding":             "gzip,deflate,br",
-		"priority":                    "u=1, i",
-		"sec-ch-ua":                   `"Google Chrome";v="135", "Not-A.Brand";v="8", "Chromium";v="135"`,
-		"sec-ch-ua-arch":              `"x86"`,
-		"sec-ch-ua-bitness":           `"64"`,
-		"sec-ch-ua-full-version":      `"136.0.7103.93"`,
-		"sec-ch-ua-full-version-list": `"Chromium";v="136.0.7103.93", "Google Chrome";v="136.0.7103.93", "Not.A/Brand";v="99.0.0.0"`,
-		"sec-ch-ua-mobile":            `?0`,
-		"sec-ch-ua-model":             `""`,
-		"sec-ch-ua-platform":          `"Windows"`,
-		"sec-ch-ua-platform-version":  `"Windows"`,
-		"sec-fetch-dest":              `empty`,
-		"sec-fetch-mode":              `cors`,
-		"sec-fetch-site":              `same-origin`,
-	}
-}
-
-// getRequestOptions 获取请求选项
-func (c *Client) getRequestOptions(referer string) cycletls.Options {
-	headers := c.getCommonHeaders()
 	if referer != "" {
 		headers["referer"] = referer
 	}
 
-	return cycletls.Options{
-		Proxy:     c.getProxyURL(),
-		Ja3:       defaultJA3,
-		UserAgent: defaultUserAgent,
-		Headers:   headers,
-	}
-}
+	rawURL := g.String(url)
+	var respResult g.Result[*surf.Response]
 
-// doRequest 执行HTTP请求并处理响应
-func (c *Client) doRequest(ctx context.Context, url, method string, bodyJson any, referer string) (string, error) {
-	var body []byte
 	if bodyJson != nil {
-		var err error
-		body, err = json.Marshal(bodyJson)
-		if err != nil {
-			return "", err
+		bodyBytes, _ := json.Marshal(bodyJson)
+		switch method {
+		case "POST":
+			respResult = c.surfClient.Post(rawURL).Body(bodyBytes).WithContext(ctx).AddHeaders(headers).Do()
+		default:
+			respResult = c.surfClient.Get(rawURL).WithContext(ctx).AddHeaders(headers).Do()
+		}
+	} else {
+		switch method {
+		case "POST":
+			respResult = c.surfClient.Post(rawURL).WithContext(ctx).AddHeaders(headers).Do()
+		default:
+			respResult = c.surfClient.Get(rawURL).WithContext(ctx).AddHeaders(headers).Do()
 		}
 	}
 
-	options := c.getRequestOptions(referer)
-	if body != nil {
-		options.Body = string(body)
+	if respResult.IsErr() {
+		return "", fmt.Errorf("request failed: %w", respResult.Err())
 	}
 
-	response, err := c.httpClient.Do(url, options, method)
-	if err != nil {
-		return "", fmt.Errorf("request failed: %w", err)
+	resp := respResult.Ok()
+	statusCode := int(resp.StatusCode)
+	if statusCode < 200 || statusCode >= 300 {
+		return "", fmt.Errorf("http status: %d", statusCode)
 	}
 
-	if response.Status < 200 || response.Status >= 300 {
-		return "", fmt.Errorf("http status: %d", response.Status)
-	}
-
-	return response.Body, nil
+	body := resp.Body.String().Unwrap()
+	return body.Std(), nil
 }
 
-// parseGmgnResponse 解析OKX响应
+// parseOkxResponse 解析OKX响应
 func (c *Client) parseOkxResponse(responseBody string) (*okxResponse, error) {
 	var res okxResponse
 	if err := json.Unmarshal([]byte(responseBody), &res); err != nil {
@@ -123,6 +123,13 @@ func (c *Client) parseOkxResponse(responseBody string) (*okxResponse, error) {
 	return &res, nil
 }
 
+// FetchTokenCandles 获取代币K线数据
+// ctx: 上下文
+// token: 代币地址
+// to: 结束时间
+// interval: K线周期 (如 "1m", "5m", "1h", "1d")
+// limit: 返回数据条数限制
+// 返回: K线数据切片和错误
 func (c *Client) FetchTokenCandles(ctx context.Context, token string, to time.Time, interval string, limit int) ([]charts.Ohlc, error) {
 	intervalD, err := charts.ResolutionToDuration(interval)
 	if err != nil {
@@ -132,7 +139,7 @@ func (c *Client) FetchTokenCandles(ctx context.Context, token string, to time.Ti
 	url := fmt.Sprintf("%s/priapi/v5/dex/token/market/dex-token-hlc-candles?chainId=501&address=%s&after=%d&bar=%s&limit=%d&t=%d",
 		okxBaseURL, token, to.UnixMilli(), interval, limit, time.Now().Unix())
 
-	response, err := c.doRequest(ctx, url, http.MethodGet, nil, "https://web3.okx.com/")
+	response, err := c.doRequest(ctx, url, "GET", nil, "https://web3.okx.com/")
 	if err != nil {
 		return nil, err
 	}

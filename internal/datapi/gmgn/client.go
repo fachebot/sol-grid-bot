@@ -1,63 +1,62 @@
 package gmgn
 
+// GMGN AI API 客户端
+// 用于获取GMGN的K线数据、持仓信息、钱包持仓和热门代币数据
+
 import (
 	"context"
-	"crypto/rand"
-	"crypto/tls"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
 	"github.com/fachebot/sol-grid-bot/internal/charts"
 	"github.com/fachebot/sol-grid-bot/internal/config"
 
-	"github.com/Danny-Dasilva/CycleTLS/cycletls"
+	"github.com/enetx/g"
+	"github.com/enetx/surf"
 	"github.com/google/uuid"
-	"golang.org/x/net/proxy"
 )
 
 const (
-	// API endpoints
+	// GMGN AI 基础URL
 	gmgnAIBaseURL = "https://gmgn.ai"
-
-	// HTTP headers
-	defaultJA3       = "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-51-43-13-45-28-21,29-23-24-25-256-257,0"
-	defaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36"
 )
 
-var (
-	fakeDeviceInfo = ""
-)
+// fakeDeviceInfo 模拟的设备信息参数
+var fakeDeviceInfo = ""
 
+// getDeviceInfo 生成模拟的设备信息
+// 用于绕过GMGN的反爬虫检测
 func getDeviceInfo() (string, error) {
 	deviceId, err := uuid.NewRandom()
 	if err != nil {
 		return "", err
 	}
 
-	var buffer [16]byte
-	if _, err = rand.Read(buffer[:]); err != nil {
-		return "", err
+	deviceInfo := map[string]string{
+		"device_id": deviceId.String(),
+		"client_id": "gmgn_web_20250820-2734-a756529",
+		"from_app":  "gmgn",
+		"app_ver":   "20250820-2734-a756529",
+		"tz_name":   "Etc/GMT-8",
+		"tz_offset": "28800",
+		"app_lang":  "zh-CN",
+		"os":        "web",
 	}
-
-	deviceInfo := url.Values{
-		"device_id": []string{deviceId.String()},
-		"client_id": []string{"gmgn_web_20250820-2734-a756529"},
-		"from_app":  []string{"gmgn"},
-		"app_ver":   []string{"20250820-2734-a756529"},
-		"tz_name":   []string{"Etc/GMT-8"},
-		"tz_offset": []string{"28800"},
-		"app_lang":  []string{"zh-CN"},
-		"fp_did":    []string{hex.EncodeToString(buffer[:])},
-		"os":        []string{"web"},
-	}
-	return deviceInfo.Encode(), nil
+	return encodeURLParams(deviceInfo), nil
 }
 
+// encodeURLParams 将参数Map编码为URL查询字符串
+func encodeURLParams(params map[string]string) string {
+	var pairs []string
+	for k, v := range params {
+		pairs = append(pairs, k+"="+v)
+	}
+	return strings.Join(pairs, "&")
+}
+
+// init 初始化模块，在包加载时生成设备信息
 func init() {
 	var err error
 	fakeDeviceInfo, err = getDeviceInfo()
@@ -66,108 +65,88 @@ func init() {
 	}
 }
 
+// Client GMGN API客户端结构体
 type Client struct {
-	proxy      config.Sock5Proxy
-	httpClient cycletls.CycleTLS
-	zenRows    config.ZenRows
+	surfClient *surf.Client // HTTP客户端
 }
 
-func NewClient(proxy config.Sock5Proxy, zenRows config.ZenRows) *Client {
+// NewClient 创建新的GMGN API客户端
+// proxy: SOCK5 代理配置
+func NewClient(proxy config.Sock5Proxy) *Client {
+	var cli *surf.Client
+
+	if proxy.Enable {
+		proxyURL := g.String(fmt.Sprintf("socks5://%s:%d", proxy.Host, proxy.Port))
+		cli = surf.NewClient().
+			Builder().
+			Impersonate().
+			Chrome().
+			Proxy(proxyURL).
+			Build().
+			Unwrap()
+	} else {
+		cli = surf.NewClient().
+			Builder().
+			Impersonate().
+			Chrome().
+			Build().
+			Unwrap()
+	}
+
 	return &Client{
-		proxy:      proxy,
-		httpClient: cycletls.Init(),
-		zenRows:    zenRows,
+		surfClient: cli,
 	}
 }
 
-// getProxyURL 获取代理URL
-func (c *Client) getProxyURL() string {
-	if !c.proxy.Enable {
-		return ""
+// doRequest 发送HTTP请求到GMGN API
+// ctx: 上下文
+// url: 请求URL
+// method: HTTP方法 (GET/POST)
+// bodyJson: 请求体JSON数据
+// referer: Referer头
+// 返回: 响应体字符串和错误
+func (c *Client) doRequest(ctx context.Context, url, method string, bodyJson any, referer string) (string, error) {
+	headers := map[string]string{
+		"accept":          "application/json, text/plain, */*",
+		"accept-language": "zh-CN,zh;q=0.9",
+		"accept-encoding": "gzip,deflate,br",
 	}
-	return fmt.Sprintf("socks5://%s:%d", c.proxy.Host, c.proxy.Port)
-}
-
-// getCommonHeaders 获取通用请求头
-func (c *Client) getCommonHeaders() map[string]string {
-	return map[string]string{
-		"accept":                      "application/json, text/plain, */*",
-		"accept-language":             "zh-CN,zh;q=0.9",
-		"accept-encoding":             "gzip,deflate,br",
-		"priority":                    "u=1, i",
-		"sec-ch-ua":                   `"Google Chrome";v="135", "Not-A.Brand";v="8", "Chromium";v="135"`,
-		"sec-ch-ua-arch":              `"x86"`,
-		"sec-ch-ua-bitness":           `"64"`,
-		"sec-ch-ua-full-version":      `"136.0.7103.93"`,
-		"sec-ch-ua-full-version-list": `"Chromium";v="136.0.7103.93", "Google Chrome";v="136.0.7103.93", "Not.A/Brand";v="99.0.0.0"`,
-		"sec-ch-ua-mobile":            `?0`,
-		"sec-ch-ua-model":             `""`,
-		"sec-ch-ua-platform":          `"Windows"`,
-		"sec-ch-ua-platform-version":  `"Windows"`,
-		"sec-fetch-dest":              `empty`,
-		"sec-fetch-mode":              `cors`,
-		"sec-fetch-site":              `same-origin`,
-	}
-}
-
-// getRequestOptions 获取请求选项
-func (c *Client) getRequestOptions(referer string) cycletls.Options {
-	headers := c.getCommonHeaders()
 	if referer != "" {
 		headers["referer"] = referer
 	}
 
-	return cycletls.Options{
-		Proxy:     c.getProxyURL(),
-		Ja3:       defaultJA3,
-		UserAgent: defaultUserAgent,
-		Headers:   headers,
-	}
-}
+	rawURL := g.String(url)
+	var respResult g.Result[*surf.Response]
 
-// doRequest 执行HTTP请求并处理响应
-func (c *Client) doRequest(ctx context.Context, scraperApiKey, url, method string, bodyJson any, referer string) (string, error) {
-	if scraperApiKey == "" {
-		var body []byte
-		if bodyJson != nil {
-			var err error
-			body, err = json.Marshal(bodyJson)
-			if err != nil {
-				return "", err
-			}
+	if bodyJson != nil {
+		bodyBytes, _ := json.Marshal(bodyJson)
+		switch method {
+		case "POST":
+			respResult = c.surfClient.Post(rawURL).Body(bodyBytes).WithContext(ctx).AddHeaders(headers).Do()
+		default:
+			respResult = c.surfClient.Get(rawURL).WithContext(ctx).AddHeaders(headers).Do()
 		}
-
-		options := c.getRequestOptions(referer)
-		if body != nil {
-			options.Body = string(body)
-		}
-
-		response, err := c.httpClient.Do(url, options, method)
-		if err != nil {
-			return "", fmt.Errorf("request failed: %w", err)
-		}
-
-		if response.Status < 200 || response.Status >= 300 {
-			return "", fmt.Errorf("http status: %d", response.Status)
-		}
-
-		return response.Body, nil
-	}
-
-	httpClient := new(http.Client)
-	if c.proxy.Enable {
-		socks5Proxy := fmt.Sprintf("%s:%d", c.proxy.Host, c.proxy.Port)
-		dialer, err := proxy.SOCKS5("tcp", socks5Proxy, nil, proxy.Direct)
-		if err != nil {
-			return "", err
-		}
-
-		httpClient.Transport = &http.Transport{
-			Dial:            dialer.Dial,
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	} else {
+		switch method {
+		case "POST":
+			respResult = c.surfClient.Post(rawURL).WithContext(ctx).AddHeaders(headers).Do()
+		default:
+			respResult = c.surfClient.Get(rawURL).WithContext(ctx).AddHeaders(headers).Do()
 		}
 	}
-	return scraperDoRequest(ctx, httpClient, scraperApiKey, method, url, bodyJson)
+
+	if respResult.IsErr() {
+		return "", fmt.Errorf("request failed: %w", respResult.Err())
+	}
+
+	resp := respResult.Ok()
+	statusCode := int(resp.StatusCode)
+	if statusCode < 200 || statusCode >= 300 {
+		return "", fmt.Errorf("http status: %d", statusCode)
+	}
+
+	body := resp.Body.String().Unwrap()
+	return body.Std(), nil
 }
 
 // parseGmgnResponse 解析GMGN响应
@@ -201,6 +180,13 @@ func (c *Client) convertToOhlcData(gmgnData []gmgnOhlc) []charts.Ohlc {
 	return ohlcs
 }
 
+// FetchTokenCandles 获取代币K线数据
+// ctx: 上下文
+// token: 代币地址
+// to: 结束时间
+// period: K线周期 (如 "1m", "5m", "1h", "1d")
+// limit: 返回数据条数限制
+// 返回: K线数据切片和错误
 func (c *Client) FetchTokenCandles(ctx context.Context, token string, to time.Time, period string, limit int) ([]charts.Ohlc, error) {
 	intervalD, err := charts.ResolutionToDuration(period)
 	if err != nil {
@@ -211,11 +197,7 @@ func (c *Client) FetchTokenCandles(ctx context.Context, token string, to time.Ti
 		gmgnAIBaseURL, token, fakeDeviceInfo, period, to.UnixMilli(), limit)
 	referer := fmt.Sprintf("%s/sol/token/%s", gmgnAIBaseURL, token)
 
-	scraperApiKey := ""
-	if c.zenRows.FetchTokenCandles {
-		scraperApiKey = c.zenRows.Apikey
-	}
-	response, err := c.doRequest(ctx, scraperApiKey, url, http.MethodGet, nil, referer)
+	response, err := c.doRequest(ctx, url, "GET", nil, referer)
 	if err != nil {
 		return nil, err
 	}
@@ -236,16 +218,16 @@ func (c *Client) FetchTokenCandles(ctx context.Context, token string, to time.Ti
 	return result, nil
 }
 
+// FetchTokenHolders 获取代币持有者列表
+// ctx: 上下文
+// token: 代币地址
+// 返回: 持有者信息列表和错误
 func (c *Client) FetchTokenHolders(ctx context.Context, token string) ([]*HolderInfo, error) {
 	url := fmt.Sprintf("%s/vas/api/v1/token_holders/sol/%s?%s&limit=100&cost=20orderby=amount_percentage&direction=desc",
 		gmgnAIBaseURL, token, fakeDeviceInfo)
 	referer := fmt.Sprintf("%s/sol/token/%s", gmgnAIBaseURL, token)
 
-	scraperApiKey := ""
-	if c.zenRows.FetchTokenHolders {
-		scraperApiKey = c.zenRows.Apikey
-	}
-	response, err := c.doRequest(ctx, scraperApiKey, url, http.MethodGet, nil, referer)
+	response, err := c.doRequest(ctx, url, "GET", nil, referer)
 	if err != nil {
 		return nil, err
 	}
@@ -263,16 +245,16 @@ func (c *Client) FetchTokenHolders(ctx context.Context, token string) ([]*Holder
 	return holders.List, nil
 }
 
+// FetchWalletHoldings 获取钱包持仓列表
+// ctx: 上下文
+// wallet: 钱包地址
+// 返回: 持仓信息列表和错误
 func (c *Client) FetchWalletHoldings(ctx context.Context, wallet string) ([]*WalletHolding, error) {
 	url := fmt.Sprintf("%s/api/v1/wallet_holdings/sol/%s?%s&limit=50&orderby=last_active_timestamp&direction=desc&showsmall=false&sellout=false&hide_airdrop=true&hide_abnormal=false",
 		gmgnAIBaseURL, wallet, fakeDeviceInfo)
 	referer := fmt.Sprintf("%s/sol/address/%s", gmgnAIBaseURL, wallet)
 
-	scraperApiKey := ""
-	if c.zenRows.FetchWalletHoldings {
-		scraperApiKey = c.zenRows.Apikey
-	}
-	response, err := c.doRequest(ctx, scraperApiKey, url, http.MethodGet, nil, referer)
+	response, err := c.doRequest(ctx, url, "GET", nil, referer)
 	if err != nil {
 		return nil, err
 	}
@@ -290,6 +272,10 @@ func (c *Client) FetchWalletHoldings(ctx context.Context, wallet string) ([]*Wal
 	return holdings.Holdings, nil
 }
 
+// FetchTrendingToken1H 获取1小时内热门代币
+// ctx: 上下文
+// tokenFilter: 代币过滤条件
+// 返回: 热门代币列表和错误
 func (c *Client) FetchTrendingToken1H(ctx context.Context, tokenFilter TokenFilter) (*TrendingTokens, error) {
 	params := []string{
 		"orderby=renowned_count",
@@ -319,11 +305,7 @@ func (c *Client) FetchTrendingToken1H(ctx context.Context, tokenFilter TokenFilt
 	referer := "https://gmgn.ai/trend?chain=sol"
 	url := fmt.Sprintf("%s/defi/quotation/v1/rank/sol/swaps/1h?%s&%s", gmgnAIBaseURL, fakeDeviceInfo, strings.Join(params, "&"))
 
-	scraperApiKey := ""
-	if c.zenRows.FetchWalletHoldings {
-		scraperApiKey = c.zenRows.Apikey
-	}
-	response, err := c.doRequest(ctx, scraperApiKey, url, http.MethodGet, nil, referer)
+	response, err := c.doRequest(ctx, url, "GET", nil, referer)
 	if err != nil {
 		return nil, err
 	}

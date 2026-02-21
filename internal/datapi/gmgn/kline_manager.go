@@ -1,5 +1,8 @@
 package gmgn
 
+// GMGN K线管理器
+// 管理K线数据的订阅、缓存和分发
+
 import (
 	"context"
 	"time"
@@ -9,22 +12,27 @@ import (
 )
 
 const (
-	maxCandelsLimit = 1000
+	maxCandelsLimit = 1000 // 最大K线数据条数
 )
 
+// KlineManager K线管理器结构体
 type KlineManager struct {
-	ctx      context.Context
-	cancel   context.CancelFunc
-	stopChan chan struct{}
+	ctx      context.Context    // 上下文
+	cancel   context.CancelFunc // 取消函数
+	stopChan chan struct{}      // 停止信号通道
 
-	client         *Client
-	subscriber     *QuotationSubscriber
-	candles        int
-	resolution     time.Duration
-	tokenOhlcsMap  map[string][]charts.Ohlc
-	tokenOhlcsChan chan charts.TokenOhlcs
+	client         *Client                  // GMGN API客户端
+	subscriber     *QuotationSubscriber     // WebSocket订阅者
+	candles        int                      // K线数量
+	resolution     time.Duration            // K线周期
+	tokenOhlcsMap  map[string][]charts.Ohlc // 代币K线数据缓存
+	tokenOhlcsChan chan charts.TokenOhlcs   // K线数据输出通道
 }
 
+// NewKlineManager 创建新的K线管理器
+// client: GMGN API客户端
+// subscriber: WebSocket订阅者
+// candles: K线数量
 func NewKlineManager(client *Client, subscriber *QuotationSubscriber, candles int) *KlineManager {
 	if candles > maxCandelsLimit {
 		candles = maxCandelsLimit
@@ -48,6 +56,7 @@ func NewKlineManager(client *Client, subscriber *QuotationSubscriber, candles in
 	}
 }
 
+// Stop 停止K线管理器服务
 func (m *KlineManager) Stop() {
 	if m.stopChan == nil {
 		return
@@ -70,6 +79,7 @@ func (m *KlineManager) Stop() {
 	logger.Infof("[KlineManager] 服务已经停止")
 }
 
+// Start 启动K线管理器服务
 func (m *KlineManager) Start() {
 	if m.stopChan != nil {
 		return
@@ -80,14 +90,17 @@ func (m *KlineManager) Start() {
 	go m.run()
 }
 
+// Subscribe 订阅代币K线数据
 func (m *KlineManager) Subscribe(assets []string) error {
 	return m.subscriber.Subscribe(assets)
 }
 
+// Unsubscribe 取消订阅代币K线数据
 func (m *KlineManager) Unsubscribe(assets []string) error {
 	return nil
 }
 
+// GetOhlcsChan 获取K线数据输出通道
 func (m *KlineManager) GetOhlcsChan() <-chan charts.TokenOhlcs {
 	if m.tokenOhlcsChan == nil {
 		m.tokenOhlcsChan = make(chan charts.TokenOhlcs, 1024)
@@ -95,6 +108,7 @@ func (m *KlineManager) GetOhlcsChan() <-chan charts.TokenOhlcs {
 	return m.tokenOhlcsChan
 }
 
+// run 主运行循环，处理K线数据更新和分发
 func (m *KlineManager) run() {
 	tickerChan := m.subscriber.GetTickerChan()
 
@@ -120,6 +134,7 @@ func (m *KlineManager) run() {
 	}
 }
 
+// trimOhlcs 裁剪K线数据，保持在限制范围内
 func (m *KlineManager) trimOhlcs(ohlcs []charts.Ohlc) []charts.Ohlc {
 	if len(ohlcs) <= maxCandelsLimit {
 		return ohlcs
@@ -131,6 +146,8 @@ func (m *KlineManager) trimOhlcs(ohlcs []charts.Ohlc) []charts.Ohlc {
 	return ohlcs
 }
 
+// updateOhlcs 更新K线数据
+// 首次接收时从API加载历史数据，后续增量更新
 func (m *KlineManager) updateOhlcs(data Ticker) ([]charts.Ohlc, bool) {
 	ohlcs := m.tokenOhlcsMap[data.Token]
 

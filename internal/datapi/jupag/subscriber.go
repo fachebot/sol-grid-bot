@@ -1,5 +1,8 @@
 package jupag
 
+// Jupiter 交易数据订阅者
+// 通过WebSocket实时接收代币交易数据
+
 import (
 	"context"
 	"encoding/json"
@@ -19,24 +22,27 @@ import (
 )
 
 const (
-	reconnectInitial = 1 * time.Second
-	reconnectMax     = 30 * time.Second
+	reconnectInitial = 1 * time.Second  // 初始重连间隔
+	reconnectMax     = 30 * time.Second // 最大重连间隔
 )
 
+// JupagSubscriber Jupiter WebSocket订阅者结构体
 type JupagSubscriber struct {
-	ctx            context.Context
-	cancel         context.CancelFunc
-	stopChan       chan struct{}
-	url            string
-	conn           *websocket.Conn
-	proxy          config.Sock5Proxy
-	reconnect      chan struct{}
-	tradeChan      chan []Trade
-	mutex          sync.Mutex
-	assets         map[string]struct{}
-	messageCounter map[string]int
+	ctx            context.Context     // 上下文
+	cancel         context.CancelFunc  // 取消函数
+	stopChan       chan struct{}       // 停止信号通道
+	url            string              // WebSocket URL
+	conn           *websocket.Conn     // WebSocket连接
+	proxy          config.Sock5Proxy   // SOCK5代理配置
+	reconnect      chan struct{}       // 重连信号通道
+	tradeChan      chan []Trade        // 交易数据通道
+	mutex          sync.Mutex          // 互斥锁
+	assets         map[string]struct{} // 订阅的代币列表
+	messageCounter map[string]int      // 消息计数器
 }
 
+// netDialTLSContext 创建自定义TLS连接的Dialer
+// 支持SOCK5代理和TLS指纹模拟
 func netDialTLSContext(ctx context.Context, network, addr string, sock5Proxy string) (net.Conn, error) {
 	serverName := addr
 	if host, _, err := net.SplitHostPort(addr); err == nil {
@@ -87,6 +93,8 @@ func netDialTLSContext(ctx context.Context, network, addr string, sock5Proxy str
 	return client, nil
 }
 
+// NewJupagSubscriber 创建新的Jupiter订阅者
+// proxy: SOCK5代理配置
 func NewJupagSubscriber(proxy config.Sock5Proxy) *JupagSubscriber {
 	ctx, cancel := context.WithCancel(context.Background())
 	subscriber := &JupagSubscriber{
@@ -101,6 +109,7 @@ func NewJupagSubscriber(proxy config.Sock5Proxy) *JupagSubscriber {
 	return subscriber
 }
 
+// Stop 停止订阅者服务
 func (subscriber *JupagSubscriber) Stop() {
 	logger.Infof("[JupagSubscriber] 准备停止服务")
 
@@ -123,6 +132,7 @@ func (subscriber *JupagSubscriber) Stop() {
 	logger.Infof("[JupagSubscriber] 服务已经停止")
 }
 
+// Start 启动订阅者服务
 func (subscriber *JupagSubscriber) Start() {
 	if subscriber.stopChan != nil {
 		return
@@ -136,12 +146,14 @@ func (subscriber *JupagSubscriber) Start() {
 	}
 }
 
+// WaitUntilConnected 等待连接建立
 func (subscriber *JupagSubscriber) WaitUntilConnected() {
 	for subscriber.conn == nil {
 		time.Sleep(time.Second * 1)
 	}
 }
 
+// GetTradeChan 获取交易数据通道
 func (subscriber *JupagSubscriber) GetTradeChan() <-chan []Trade {
 	if subscriber.tradeChan == nil {
 		subscriber.tradeChan = make(chan []Trade, 1024)
@@ -149,6 +161,8 @@ func (subscriber *JupagSubscriber) GetTradeChan() <-chan []Trade {
 	return subscriber.tradeChan
 }
 
+// SubscribeTrades 订阅代币交易数据
+// assets: 代币地址列表
 func (subscriber *JupagSubscriber) SubscribeTrades(assets []string) error {
 	allAssets := make([]string, 0)
 	subscriber.mutex.Lock()
@@ -178,6 +192,8 @@ func (subscriber *JupagSubscriber) SubscribeTrades(assets []string) error {
 	return err
 }
 
+// UnsubscribeTrades 取消订阅代币交易数据
+// assets: 代币地址列表
 func (subscriber *JupagSubscriber) UnsubscribeTrades(assets []string) error {
 	if len(assets) == 0 {
 		return nil
@@ -205,6 +221,7 @@ func (subscriber *JupagSubscriber) UnsubscribeTrades(assets []string) error {
 	return err
 }
 
+// run 主运行循环，处理重连逻辑
 func (subscriber *JupagSubscriber) run() {
 	subscriber.connect()
 
@@ -233,6 +250,7 @@ loop:
 	subscriber.stopChan <- struct{}{}
 }
 
+// connect 建立WebSocket连接
 func (subscriber *JupagSubscriber) connect() {
 	proxy := ""
 	if subscriber.proxy.Enable {
@@ -282,6 +300,7 @@ func (subscriber *JupagSubscriber) connect() {
 	go subscriber.readMessages()
 }
 
+// heartbeat 发送心跳包保持连接
 func (subscriber *JupagSubscriber) heartbeat(ctx context.Context) {
 	timer := time.NewTimer(0)
 	defer timer.Stop()
@@ -303,6 +322,7 @@ func (subscriber *JupagSubscriber) heartbeat(ctx context.Context) {
 	}
 }
 
+// readMessages 读取并处理WebSocket消息
 func (subscriber *JupagSubscriber) readMessages() {
 	defer subscriber.conn.Close()
 
@@ -359,6 +379,7 @@ func (subscriber *JupagSubscriber) readMessages() {
 	}
 }
 
+// scheduleReconnect 安排重连
 func (subscriber *JupagSubscriber) scheduleReconnect() {
 	if subscriber.ctx.Err() == nil {
 		select {

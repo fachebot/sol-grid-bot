@@ -1,5 +1,8 @@
 package gmgn
 
+// GMGN 行情数据订阅者
+// 通过WebSocket实时接收代币K线数据
+
 import (
 	"context"
 	"encoding/json"
@@ -23,49 +26,57 @@ import (
 )
 
 const (
-	reconnectInitial = 1 * time.Second
-	reconnectMax     = 30 * time.Second
+	reconnectInitial = 1 * time.Second  // 初始重连间隔
+	reconnectMax     = 30 * time.Second // 最大重连间隔
 )
 
+// Ticker K线数据 ticker
 type Ticker struct {
-	Token string
-	First bool
-	Ohlc  charts.Ohlc
+	Token string      // 代币地址
+	First bool        // 是否为首次接收
+	Ohlc  charts.Ohlc // K线数据
 }
 
+// channelMessage WebSocket通道消息结构体
 type channelMessage struct {
-	Channel string          `json:"channel"`
-	Data    json.RawMessage `json:"data"`
+	Channel string          `json:"channel"` // 通道名称
+	Data    json.RawMessage `json:"data"`    // 消息数据
 }
 
+// klineChannelData K线通道数据
 type klineChannelData struct {
-	N string          `json:"n"`
-	A string          `json:"a"`
-	I string          `json:"i"`
-	O decimal.Decimal `json:"o"`
-	H decimal.Decimal `json:"h"`
-	L decimal.Decimal `json:"l"`
-	C decimal.Decimal `json:"c"`
-	V decimal.Decimal `json:"v"`
-	T int64           `json:"t"`
+	N string          `json:"n"` // 代币名称
+	A string          `json:"a"` // 代币地址
+	I string          `json:"i"` // 周期
+	O decimal.Decimal `json:"o"` // 开盘价
+	H decimal.Decimal `json:"h"` // 最高价
+	L decimal.Decimal `json:"l"` // 最低价
+	C decimal.Decimal `json:"c"` // 收盘价
+	V decimal.Decimal `json:"v"` // 成交量
+	T int64           `json:"t"` // 时间戳
 }
 
+// QuotationSubscriber GMGN行情订阅者结构体
 type QuotationSubscriber struct {
-	ctx      context.Context
-	cancel   context.CancelFunc
-	stopChan chan struct{}
+	ctx      context.Context    // 上下文
+	cancel   context.CancelFunc // 取消函数
+	stopChan chan struct{}      // 停止信号通道
 
-	conn           *websocket.Conn
-	url            string
-	resolution     string
-	tokenAddresses sync.Map
-	proxy          config.Sock5Proxy
-	reconnect      chan struct{}
+	conn           *websocket.Conn   // WebSocket连接
+	url            string            // WebSocket URL
+	resolution     string            // K线周期
+	tokenAddresses sync.Map          // 订阅的代币地址集合
+	proxy          config.Sock5Proxy // SOCK5代理配置
+	reconnect      chan struct{}     // 重连信号通道
 
-	tickerChan     chan Ticker
-	messageCounter map[string]int
+	tickerChan     chan Ticker    // K线数据通道
+	messageCounter map[string]int // 消息计数器
 }
 
+// NewQuotationSubscriber 创建新的GMGN行情订阅者
+// resolution: K线周期 (如 "1m", "5m", "1h")
+// tokenAddresses: 初始订阅的代币地址列表
+// proxy: SOCK5代理配置
 func NewQuotationSubscriber(
 	resolution string,
 	tokenAddresses []string,
@@ -88,6 +99,8 @@ func NewQuotationSubscriber(
 	return subscriber, nil
 }
 
+// netDialTLSContext 创建自定义TLS连接的Dialer
+// 支持SOCK5代理和TLS指纹模拟
 func netDialTLSContext(ctx context.Context, network, addr string, sock5Proxy string) (net.Conn, error) {
 	serverName := addr
 	if host, _, err := net.SplitHostPort(addr); err == nil {
@@ -138,6 +151,7 @@ func netDialTLSContext(ctx context.Context, network, addr string, sock5Proxy str
 	return client, nil
 }
 
+// Stop 停止订阅者服务
 func (subscriber *QuotationSubscriber) Stop() {
 	logger.Infof("[QuotationSubscriber] 准备停止服务")
 
@@ -160,6 +174,7 @@ func (subscriber *QuotationSubscriber) Stop() {
 	logger.Infof("[QuotationSubscriber] 服务已经停止")
 }
 
+// Start 启动订阅者服务
 func (subscriber *QuotationSubscriber) Start() {
 	if subscriber.stopChan != nil {
 		return
@@ -173,12 +188,14 @@ func (subscriber *QuotationSubscriber) Start() {
 	}
 }
 
+// WaitUntilConnected 等待连接建立
 func (subscriber *QuotationSubscriber) WaitUntilConnected() {
 	for subscriber.conn == nil {
 		time.Sleep(time.Second * 1)
 	}
 }
 
+// GetTickerChan 获取K线数据通道
 func (subscriber *QuotationSubscriber) GetTickerChan() <-chan Ticker {
 	if subscriber.tickerChan == nil {
 		subscriber.tickerChan = make(chan Ticker, 1024)
@@ -186,6 +203,8 @@ func (subscriber *QuotationSubscriber) GetTickerChan() <-chan Ticker {
 	return subscriber.tickerChan
 }
 
+// Subscribe 订阅代币K线数据
+// tokenAddresses: 代币地址列表
 func (subscriber *QuotationSubscriber) Subscribe(tokenAddresses []string) error {
 	for _, tokenAddress := range tokenAddresses {
 		subscriber.tokenAddresses.Store(tokenAddress, true)
@@ -207,6 +226,8 @@ func (subscriber *QuotationSubscriber) Subscribe(tokenAddresses []string) error 
 	return nil
 }
 
+// Unsubscribe 取消订阅代币K线数据
+// tokenAddresses: 代币地址列表
 func (subscriber *QuotationSubscriber) Unsubscribe(tokenAddresses []string) error {
 	for _, tokenAddress := range tokenAddresses {
 		subscriber.tokenAddresses.Delete(tokenAddress)
@@ -228,6 +249,7 @@ func (subscriber *QuotationSubscriber) Unsubscribe(tokenAddresses []string) erro
 	return nil
 }
 
+// sendSubscribe 发送订阅请求到WebSocket服务器
 func (subscriber *QuotationSubscriber) sendSubscribe(tokenAddresses []string) error {
 	if subscriber.conn == nil {
 		return fmt.Errorf("[QuotationSubscriber] 连接未建立")
@@ -258,6 +280,7 @@ func (subscriber *QuotationSubscriber) sendSubscribe(tokenAddresses []string) er
 	return subscriber.conn.WriteJSON(payload)
 }
 
+// run 主运行循环，处理重连逻辑
 func (subscriber *QuotationSubscriber) run() {
 	subscriber.connect()
 
@@ -286,6 +309,7 @@ loop:
 	subscriber.stopChan <- struct{}{}
 }
 
+// connect 建立WebSocket连接
 func (subscriber *QuotationSubscriber) connect() {
 	headers := make(http.Header)
 	headers.Set("origin", "https://gmgn.ai")
@@ -342,6 +366,7 @@ func (subscriber *QuotationSubscriber) connect() {
 	go subscriber.readMessages()
 }
 
+// heartbeat 发送心跳包保持连接
 func (subscriber *QuotationSubscriber) heartbeat(ctx context.Context) {
 	timer := time.NewTimer(0)
 	defer timer.Stop()
@@ -363,6 +388,7 @@ func (subscriber *QuotationSubscriber) heartbeat(ctx context.Context) {
 	}
 }
 
+// readMessages 读取并处理WebSocket消息
 func (subscriber *QuotationSubscriber) readMessages() {
 	defer subscriber.conn.Close()
 
@@ -430,6 +456,7 @@ func (subscriber *QuotationSubscriber) readMessages() {
 	}
 }
 
+// scheduleReconnect 安排重连
 func (subscriber *QuotationSubscriber) scheduleReconnect() {
 	if subscriber.ctx.Err() == nil {
 		subscriber.conn = nil
